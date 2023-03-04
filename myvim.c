@@ -134,6 +134,12 @@ void editorDrawsRows(struct abuf *ab){
             char welcome[80];
             int welcomelen = snprintf(welcome, sizeof(welcome), "myvim editor -- version %s", MYVIM_VERSION);
             if (welcomelen > editor_stage.screen_cols) welcomelen = editor_stage.screen_cols;
+            int padding = (editor_stage.screen_cols - welcomelen)/2;
+            if (padding){
+                abAppend(ab,"~",1);
+                padding--;
+            }
+            while(padding--) abAppend(ab," ",1);
             abAppend(ab,welcome,welcomelen);
         }
         else{
