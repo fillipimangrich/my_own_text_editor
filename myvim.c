@@ -6,6 +6,7 @@
 #include <errno.h>
 #include <sys/ioctl.h>
 #include <string.h>
+#include <sys/types.h>
 
 
 //define
@@ -26,11 +27,20 @@ enum editorKey{
 };
 
 //data
+typedef struct erow
+{
+    int size;
+    char *chars;
+}erow;
+
+
 struct editorConfig
 {
     int cx,cy;
     int screen_rows;
     int screen_cols;
+    int numrows;
+    erow row;
     struct termios orig_termios;
 };
 
@@ -160,6 +170,19 @@ int getWindowSize(int *rows, int *cols)
         return 0;
     }
 }
+
+//file I/O
+
+void editorOpen(){
+    char *line = "Hello, world!";
+    ssize_t linelen = 13;
+
+    editor_stage.row.size = linelen;
+    editor_stage.row.chars= malloc(linelen+1);
+    memcpy(editor_stage.row.chars,line,linelen);
+    editor_stage.row.chars[linelen] = '\0';
+    editor_stage.numrows=1;
+    }
 //append buffer
 
 struct abuf{
@@ -297,6 +320,7 @@ void editorProcessKeyPress(){
 void initEditor(){
     editor_stage.cx =0;
     editor_stage.cy =0;
+    editor_stage.numrows = 0;
 
     if (getWindowSize(&editor_stage.screen_rows, &editor_stage.screen_cols) == -1) die("getWindowSize");
 }
