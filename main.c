@@ -1,3 +1,4 @@
+#define _OPEN_SYS_ITOA_EXT
 #include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -40,7 +41,7 @@ struct editorConfig
     int screen_rows;
     int screen_cols;
     int numrows;
-    erow row;
+    erow *row;
     struct termios orig_termios;
 };
 
@@ -171,18 +172,39 @@ int getWindowSize(int *rows, int *cols)
     }
 }
 
+/*** row operations ***/
+void editorAppendRow(char *s, size_t len) {
+  editor_stage.row = realloc(editor_stage.row, sizeof(erow) * (editor_stage.numrows + 1));
+  int at = editor_stage.numrows;
+  editor_stage.row[at].size = len;
+  editor_stage.row[at].chars = malloc(len + 1);
+  memcpy(editor_stage.row[at].chars, s, len);
+  editor_stage.row[at].chars[len] = '\0';
+  editor_stage.numrows++;
+}
+
 //file I/O
 
-void editorOpen(){
-    char *line = "Hello, world!";
-    ssize_t linelen = 13;
+void editorOpen(char *filename) {
+  FILE *fp = fopen(filename, "r");
+  
+  if (!fp){
+    die("fopen");
+  } 
 
-    editor_stage.row.size = linelen;
-    editor_stage.row.chars= malloc(linelen+1);
-    memcpy(editor_stage.row.chars,line,linelen);
-    editor_stage.row.chars[linelen] = '\0';
-    editor_stage.numrows=1;
-    }
+  char *line = NULL;
+  size_t linecap = 0;
+  ssize_t linelen;
+  linelen = getline(&line, &linecap, fp);
+  while ((linelen = getline(&line, &linecap, fp)) != -1) {
+    while (linelen > 0 && (line[linelen - 1] == '\n' ||
+                           line[linelen - 1] == '\r'))
+      linelen--;
+    editorAppendRow(line, linelen);
+  }
+  free(line);
+  fclose(fp);
+}
 //append buffer
 
 struct abuf{
@@ -206,23 +228,32 @@ void abFree(struct  abuf *ab){
 
 
 //output
-void editorDrawsRows(struct abuf *ab){
+void editorDrawRows(struct abuf *ab){
     int y;
     for (y =0; y < editor_stage.screen_rows; y++){
-        if (y == editor_stage.screen_rows/3){
-            char welcome[80];
-            int welcomelen = snprintf(welcome, sizeof(welcome), "myvim editor -- version %s", MYVIM_VERSION);
-            if (welcomelen > editor_stage.screen_cols) welcomelen = editor_stage.screen_cols;
-            int padding = (editor_stage.screen_cols - welcomelen)/2;
-            if (padding){
-                abAppend(ab,"~",1);
-                padding--;
+        if (y >= editor_stage.numrows) {
+            char snum[5];
+            int num_len = snprintf(snum, sizeof(snum), "%d", y);
+            if (editor_stage.numrows == 0 && y == editor_stage.screen_rows/3){
+                char welcome[80];
+                int welcomelen = snprintf(welcome, sizeof(welcome), "myvim editor -- version %s", MYVIM_VERSION);
+                if (welcomelen > editor_stage.screen_cols) welcomelen = editor_stage.screen_cols;
+                int padding = (editor_stage.screen_cols - welcomelen)/2;
+                if (padding){
+                    abAppend(ab, snum , 5);
+                    padding--;
+                }
+                while(padding--) abAppend(ab," ",1);
+                abAppend(ab,welcome,welcomelen);
             }
-            while(padding--) abAppend(ab," ",1);
-            abAppend(ab,welcome,welcomelen);
-        }
-        else{
-            abAppend(ab,"~",1); //draw a ~ character on the left of the line
+            else{
+                abAppend(ab,snum,5); //draw a ~ character on the left of the line
+            }
+            } 
+        else {
+            int len = editor_stage.row[y].size;
+            if (len > editor_stage.screen_cols) len = editor_stage.screen_cols;
+            abAppend(ab, editor_stage.row[y].chars, len);
         }
 
         abAppend(ab, "\x1b[K",3); //erase in line
@@ -245,7 +276,7 @@ void editorRefreshScreen(){
 
     abAppend(&ab, "\x1b[H",3);//H command change the position of cursor
 
-    editorDrawsRows(&ab);
+    editorDrawRows(&ab);
 
     char buf[32];
 
@@ -321,17 +352,20 @@ void initEditor(){
     editor_stage.cx =0;
     editor_stage.cy =0;
     editor_stage.numrows = 0;
+    editor_stage.row = NULL;
 
     if (getWindowSize(&editor_stage.screen_rows, &editor_stage.screen_cols) == -1) die("getWindowSize");
 }
 
-int main(){
-    enableRawMode();
-    initEditor();
-
-    while (1){
-        editorRefreshScreen();
-        editorProcessKeyPress();
-    } 
-    return 0;
+int main(int argc, char *argv[]) {
+  enableRawMode();
+  initEditor();
+  if (argc >= 2) {
+    editorOpen(argv[1]);
+  }
+  while (1) {
+    editorRefreshScreen();
+    editorProcessKeyPress();
+  }
+  return 0;
 }

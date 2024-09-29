@@ -1,0 +1,8 @@
+{
+    "files.associations": {
+        "ctype.h": "c",
+        "*.tcc": "c",
+        "string": "c",
+        "streambuf": "c"
+    }
+}
